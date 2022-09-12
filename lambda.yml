@@ -1,0 +1,45 @@
+AWSTemplateFormatVersion : '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Resources:
+  AuthLambda:
+    Type: AWS::Serverless::Function
+    DependsOn: AuthLambdaExecutionRole
+    Properties:
+      FunctionName: AuthLambda
+      Runtime: nodejs14.x
+      MemorySize: 1024
+      Timeout: 15
+      Handler: ./code/index.handler
+      Role: !GetAtt AuthLambdaExecutionRole.Arn
+
+  AuthLambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: iot-auth-lambda-role
+      Path: "/"
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns: 
+        - arn:aws:iam::aws:policy/CloudWatchLambdaInsightsExecutionRolePolicy    
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
+      Policies:
+        - PolicyName: iot-auth-lambda-policy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                - dynamodb:BatchGetItem
+                - dynamodb:GetItem
+                - dynamodb:Scan
+                - dynamodb:Query
+                Resource: !Sub arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/Orders
+  
