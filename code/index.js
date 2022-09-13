@@ -4,18 +4,31 @@ const jwt_decode = require("jwt-decode");
 
 function buildPolicy(principalId, effect, resource) {
     const authResponse = {};
+    const splittedMethodArn = resource.split(':');
+    const methodArnArray = splittedMethodArn[5].split('/');
+    const region = splittedMethodArn[3];
+    const awsAccountId = splittedMethodArn[4];
+    const restApiId = methodArnArray[0];
+    const stage = methodArnArray[1];
+    const methods = [
+        "GET/products",
+        "POST/product",
+        "GET/orders",
+        "POST/order",
+    ];
+
     authResponse.principalId = principalId;
-    if (effect && resource) {
-        const policyDocument = {};
-        policyDocument.Version = '2012-10-17';
-        policyDocument.Statement = [];
-        const statementOne = {};
-        statementOne.Action = 'execute-api:Invoke';
-        statementOne.Effect = effect;
-        statementOne.Resource = resource;
-        policyDocument.Statement[0] = statementOne;
-        authResponse.policyDocument = policyDocument;
+    const policyDocument = {};
+    policyDocument.Version = '2012-10-17';
+    policyDocument.Statement = [];
+    for(let method of methods) {
+        const statement = {};
+        statement.Action = 'execute-api:Invoke';
+        statement.Effect = effect;
+        statement.Resource = `arn:aws:execute-api:${region}:${awsAccountId}:${restApiId}/${stage}/${method}`;
+        policyDocument.Statement.push(statement);
     }
+    authResponse.policyDocument = policyDocument;
     return authResponse;
 }
 
@@ -27,7 +40,6 @@ module.exports.handler = async (event, context) => {
     } else {
         const token = auth.split(' ')[1];
         const payload = jwt_decode(token);
-        console.log(payload);
         authResponse = buildPolicy(payload["cognito:username"], 'Allow', event.methodArn);
         authResponse.context = {
             username: payload["cognito:username"],
