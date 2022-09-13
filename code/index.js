@@ -32,7 +32,7 @@ module.exports.handler = async (event, context) => {
         authResponse.context = {
             username: payload["cognito:username"],
             email: payload["email"],
-            isAdmin: payload["cognito:groups"].includes("SystemAdmins")
+            isAdmin: payload["cognito:groups"] && payload["cognito:groups"].includes("SystemAdmins")
         };
     }
 
