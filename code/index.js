@@ -1,8 +1,88 @@
-const AWS = require('aws-sdk');
 const jwt_decode = require("jwt-decode");
 
+const denied_methods = [
+    {
+        path: "GET/products",
+        effect: "Deny"
+    },
+    {
+        path: "POST/product",
+        effect: "Deny"
+    },
+    {
+        path: "DELETE/product/*",
+        effect: "Deny"
+    },
+    {
+        path: "GET/orders",
+        effect: "Deny"
+    },
+    {
+        path: "POST/order",
+        effect: "Deny"
+    },
+    {
+        path: "DELETE/order/*",
+        effect: "Deny"
+    }
+];
 
-function buildPolicy(principalId, effect, resource) {
+const user_methods = [
+    {
+        path: "GET/products",
+        effect: "Allow"
+    },
+    {
+        path: "POST/product",
+        effect: "Deny"
+    },
+    {
+        path: "DELETE/product/*",
+        effect: "Deny"
+    },
+    {
+        path: "GET/orders",
+        effect: "Allow"
+    },
+    {
+        path: "POST/order",
+        effect: "Allow"
+    },
+    {
+        path: "DELETE/order/*",
+        effect: "Deny"
+    }
+];
+
+const admin_methods = [
+    {
+        path: "GET/products",
+        effect: "Allow"
+    },
+    {
+        path: "POST/product",
+        effect: "Allow"
+    },
+    {
+        path: "DELETE/product/*",
+        effect: "Allow"
+    },
+    {
+        path: "GET/orders",
+        effect: "Allow"
+    },
+    {
+        path: "POST/order",
+        effect: "Allow"
+    },
+    {
+        path: "DELETE/order/*",
+        effect: "Allow"
+    }
+];
+
+
+function buildPolicy(principalId, methods, resource) {
     const authResponse = {};
     const splittedMethodArn = resource.split(':');
     const methodArnArray = splittedMethodArn[5].split('/');
@@ -10,22 +90,18 @@ function buildPolicy(principalId, effect, resource) {
     const awsAccountId = splittedMethodArn[4];
     const restApiId = methodArnArray[0];
     const stage = methodArnArray[1];
-    const methods = [
-        "GET/products",
-        "POST/product",
-        "GET/orders",
-        "POST/order",
-    ];
+
+
 
     authResponse.principalId = principalId;
     const policyDocument = {};
     policyDocument.Version = '2012-10-17';
     policyDocument.Statement = [];
-    for(let method of methods) {
+    for (let method of methods) {
         const statement = {};
         statement.Action = 'execute-api:Invoke';
-        statement.Effect = effect;
-        statement.Resource = `arn:aws:execute-api:${region}:${awsAccountId}:${restApiId}/${stage}/${method}`;
+        statement.Effect = method.effect;
+        statement.Resource = `arn:aws:execute-api:${region}:${awsAccountId}:${restApiId}/${stage}/${method.path}`;
         policyDocument.Statement.push(statement);
     }
     authResponse.policyDocument = policyDocument;
@@ -34,18 +110,25 @@ function buildPolicy(principalId, effect, resource) {
 
 module.exports.handler = async (event, context) => {
     let authResponse = {};
-    const auth = event.authorizationToken;
-    if(!auth.includes('Bearer')) {
-        authResponse = buildPolicy('user', 'Deny', event.methodArn); 
-    } else {
-        const token = auth.split(' ')[1];
-        const payload = jwt_decode(token);
-        authResponse = buildPolicy(payload["cognito:username"], 'Allow', event.methodArn);
-        authResponse.context = {
-            username: payload["cognito:username"],
-            email: payload["email"],
-            isAdmin: payload["cognito:groups"] && payload["cognito:groups"].includes("SystemAdmins") || false
-        };
+    try {
+        const auth = event.authorizationToken;
+        if (!auth.includes('Bearer')) {
+            throw new Error('Invalid token');
+        } else {
+            const token = auth.split(' ')[1];
+            const payload = jwt_decode(token);
+            const context = {
+                username: payload["cognito:username"],
+                email: payload["email"],
+                isAdmin: payload["cognito:groups"] && payload["cognito:groups"].includes("SystemAdmins") || false
+            };
+            allowed_methods = context.isAdmin ? admin_methods : user_methods;
+            authResponse = buildPolicy(payload["cognito:username"], allowed_methods, event.methodArn);
+            authResponse.context = context;
+        }
+    } catch (e) {
+        console.log(e);
+        authResponse = buildPolicy('user', denied_methods, event.methodArn);
     }
 
     return authResponse;
